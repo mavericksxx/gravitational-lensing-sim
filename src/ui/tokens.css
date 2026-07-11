@@ -1,0 +1,107 @@
+/**
+ * Design tokens from ui-guidelines.md. This is the single source of
+ * truth for these values — change them here, not in component CSS.
+ *
+ * Font note: Inter/JetBrains Mono are listed first per the guidelines,
+ * but self-hosted @font-face files aren't wired up yet (deferred polish,
+ * not architecture); the stack falls through to system fonts until then.
+ */
+:root {
+  /* Color */
+  --color-bg: #050508;
+  --color-panel: rgba(10, 12, 20, 0.62);
+  --color-panel-solid: #0d1018;
+  --color-border: rgba(158, 173, 204, 0.14);
+  --color-border-strong: rgba(158, 173, 204, 0.28);
+  --color-accent: #ffb454;
+  --color-accent-hover: #ffc77d;
+  --color-accent-active: #e89a38;
+  --color-accent-muted: rgba(255, 180, 84, 0.4);
+  --color-accent-glow: rgba(255, 180, 84, 0.35);
+  --color-text: #e8eaf2;
+  --color-text-dim: #9ba3b8;
+  --color-text-faint: rgba(155, 163, 184, 0.55);
+  --color-error: #ff7a6b;
+  --color-shadow: rgba(0, 0, 0, 0.5);
+
+  /* Spacing (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Typography */
+  --font-sans: Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", Consolas, monospace;
+
+  /* Radius */
+  --radius-1: 3px;
+  --radius-2: 6px;
+  --radius-3: 10px;
+
+  /* Blur */
+  --blur-panel: blur(14px);
+  --blur-control: blur(8px);
+
+  /* Glow / shadow */
+  --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --glow-hud: 0 0 8px var(--color-accent-glow);
+  --glow-focus: 0 0 0 2px rgba(255, 180, 84, 0.25);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* Type scale */
+.text-panel-title {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.text-label {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.text-value {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.text-unit {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--color-text-dim);
+}
+
+.text-badge {
+  font-family: var(--font-sans);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.text-caption {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ease-out: linear;
+    --ease-in-out: linear;
+  }
+}

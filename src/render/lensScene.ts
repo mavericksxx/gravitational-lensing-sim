@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { schwarzschildRadius, shadowAngularRadius } from "../physics/deflection";
-import { buildDeflectionTable } from "./deflectionTable";
+import { buildDeflectionTable, type DeflectionTable } from "./deflectionTable";
 import fragmentShader from "./shaders/lens.frag.glsl?raw";
 import vertexShader from "./shaders/lens.vert.glsl?raw";
 
@@ -18,6 +18,8 @@ export interface LensSceneCameraConfig {
 
 export interface LensScene {
   setSize(width: number, height: number): void;
+  /** Pushes a new lens/camera configuration to the shader's uniforms. */
+  update(lens: PointMassLensConfig, camera: LensSceneCameraConfig): void;
   render(): void;
   dispose(): void;
 }
@@ -28,11 +30,7 @@ export interface LensScene {
  * deflection math from Stage 1 renders at interactive framerates instead
  * of a few seconds per frame on the CPU.
  */
-export function createLensScene(
-  canvas: HTMLCanvasElement,
-  lens: PointMassLensConfig,
-  camera: LensSceneCameraConfig,
-): LensScene {
+export function createLensScene(canvas: HTMLCanvasElement): LensScene {
   // preserveDrawingBuffer is required for the screenshot-export feature
   // planned in the frontend spec, and it also makes the canvas readable
   // for pixel-level testing/debugging; the cost is negligible for a
@@ -47,37 +45,60 @@ export function createLensScene(
   const scene = new THREE.Scene();
   const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-  const distanceLensSourceM = camera.distanceObserverSourceM - camera.distanceObserverLensM;
-  const shadowRadius = shadowAngularRadius(lens.massKg, camera.distanceObserverLensM);
-  const bMin = schwarzschildRadius(lens.massKg);
-  const bMax = camera.distanceObserverLensM * camera.fieldOfViewRad * 1.5;
-  const table = buildDeflectionTable(lens.massKg, bMin, bMax);
-
   const material = new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader,
     uniforms: {
       uResolution: { value: new THREE.Vector2(1, 1) },
-      uFieldOfViewRad: { value: camera.fieldOfViewRad },
-      uLensAngularPosition: {
-        value: new THREE.Vector2(lens.angularPosition.x, lens.angularPosition.y),
-      },
-      uDistanceObserverLensM: { value: camera.distanceObserverLensM },
-      uLensSourceDistanceRatio: { value: distanceLensSourceM / camera.distanceObserverSourceM },
-      uShadowRadiusRad: { value: shadowRadius },
-      uCheckerPeriodRad: { value: camera.fieldOfViewRad / 12 },
-      uDeflectionTable: { value: table.texture },
-      uTableLogBMin: { value: table.logBMin },
-      uTableLogBMax: { value: table.logBMax },
+      uFieldOfViewRad: { value: 1 },
+      uLensAngularPosition: { value: new THREE.Vector2(0, 0) },
+      uDistanceObserverLensM: { value: 1 },
+      uLensSourceDistanceRatio: { value: 0.5 },
+      uShadowRadiusRad: { value: 0 },
+      uCheckerPeriodRad: { value: 1 },
+      uDeflectionTable: { value: null as THREE.DataTexture | null },
+      uTableLogBMin: { value: 0 },
+      uTableLogBMax: { value: 1 },
     },
   });
 
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
   scene.add(quad);
 
+  let currentTable: DeflectionTable | null = null;
+
   function setSize(width: number, height: number): void {
     renderer.setSize(width, height, false);
     (material.uniforms.uResolution.value as THREE.Vector2).set(width, height);
+  }
+
+  // Rebuilding the table (1024 samples, a few KB texture upload) is cheap
+  // enough to do on every update — including every slider-drag tick —
+  // and it sidesteps a correctness bug: the table's b-range depends on
+  // both mass and field of view, so a partial rebuild policy risks a
+  // stale range when only one of those changes.
+  function update(lens: PointMassLensConfig, camera: LensSceneCameraConfig): void {
+    const distanceLensSourceM = camera.distanceObserverSourceM - camera.distanceObserverLensM;
+    const shadowRadius = shadowAngularRadius(lens.massKg, camera.distanceObserverLensM);
+    const bMin = schwarzschildRadius(lens.massKg);
+    const bMax = camera.distanceObserverLensM * camera.fieldOfViewRad * 1.5;
+
+    currentTable?.texture.dispose();
+    currentTable = buildDeflectionTable(lens.massKg, bMin, bMax);
+
+    material.uniforms.uFieldOfViewRad.value = camera.fieldOfViewRad;
+    (material.uniforms.uLensAngularPosition.value as THREE.Vector2).set(
+      lens.angularPosition.x,
+      lens.angularPosition.y,
+    );
+    material.uniforms.uDistanceObserverLensM.value = camera.distanceObserverLensM;
+    material.uniforms.uLensSourceDistanceRatio.value =
+      distanceLensSourceM / camera.distanceObserverSourceM;
+    material.uniforms.uShadowRadiusRad.value = shadowRadius;
+    material.uniforms.uCheckerPeriodRad.value = camera.fieldOfViewRad / 12;
+    material.uniforms.uDeflectionTable.value = currentTable.texture;
+    material.uniforms.uTableLogBMin.value = currentTable.logBMin;
+    material.uniforms.uTableLogBMax.value = currentTable.logBMax;
   }
 
   function render(): void {
@@ -87,9 +108,9 @@ export function createLensScene(
   function dispose(): void {
     material.dispose();
     quad.geometry.dispose();
-    table.texture.dispose();
+    currentTable?.texture.dispose();
     renderer.dispose();
   }
 
-  return { setSize, render, dispose };
+  return { setSize, update, render, dispose };
 }
