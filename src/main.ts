@@ -1,27 +1,18 @@
 import "./style.css";
-import { checkerboardBackground } from "./physics/backgrounds";
 import { AU, SOLAR_MASS } from "./physics/constants";
 import { einsteinRadius } from "./physics/deflection";
-import {
-  renderLensedImage,
-  type LensCameraConfig,
-  type PointMassLens,
-} from "./physics/renderLensedImage";
+import { createLensScene, type PointMassLensConfig } from "./render/lensScene";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#scene");
 if (!canvas) {
   throw new Error("Missing #scene canvas element");
 }
 
-const ctx = canvas.getContext("2d");
-if (!ctx) {
-  throw new Error("2D canvas context unavailable");
-}
-
-// Stage 1 demo scene: a single point-mass lens, ray-traced on the CPU to
-// validate the deflection math (see src/physics/) before porting it to a
-// GLSL shader in Stage 2. Not real-time by design.
-const lens: PointMassLens = {
+// Same demo scene as Stage 1's CPU renderer (src/physics/renderLensedImage),
+// so the two are directly visually comparable: a single point-mass lens,
+// now ray-traced in real time on the GPU instead of a few seconds per
+// frame on the CPU. Hardcoded — sliders/UI land in Stage 3.
+const lens: PointMassLensConfig = {
   massKg: SOLAR_MASS * 1e6,
   angularPosition: { x: 0, y: 0 },
 };
@@ -35,38 +26,23 @@ const thetaE = einsteinRadius(
   distanceLensSourceM,
 );
 
-function render(): void {
-  const width = canvas!.width;
-  const height = canvas!.height;
-  if (width === 0 || height === 0) return;
-
-  const camera: LensCameraConfig = {
-    distanceObserverLensM,
-    distanceObserverSourceM,
-    fieldOfViewRad: thetaE * 6, // auto-zoom so the Einstein ring is always framed nicely
-    width,
-    height,
-  };
-
-  const background = checkerboardBackground(camera.fieldOfViewRad / 12);
-  const image = renderLensedImage(lens, camera, background);
-  ctx!.putImageData(new ImageData(image.data, image.width, image.height), 0, 0);
-}
-
-let renderScheduled = false;
-function scheduleRender(): void {
-  if (renderScheduled) return;
-  renderScheduled = true;
-  requestAnimationFrame(() => {
-    renderScheduled = false;
-    render();
-  });
-}
+const scene = createLensScene(canvas, lens, {
+  distanceObserverLensM,
+  distanceObserverSourceM,
+  fieldOfViewRad: thetaE * 6, // auto-zoom so the Einstein ring is always framed nicely
+});
 
 function resize(): void {
-  canvas!.width = window.innerWidth;
-  canvas!.height = window.innerHeight;
-  scheduleRender();
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  if (width === 0 || height === 0) return;
+  scene.setSize(width, height);
 }
 window.addEventListener("resize", resize);
 resize();
+
+function frame(): void {
+  scene.render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
