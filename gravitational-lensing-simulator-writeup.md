@@ -75,6 +75,16 @@ Everything on screen competes with a black hole warping a starfield, and everyth
 - **One accent color** (a warm amber reads well against blue-black space and evokes redshift; cyan is the safe alternative). Reserved strictly for interactive states and highlighted physics values. No decorative gradients — the gravitational lens is the gradient.
 - **Type:** a clean sans for labels; a monospace with tabular numerals for every numeric readout (masses, distances, angles) so values don't jitter horizontally as they change. Physics quantities always carry units (M☉, r_s, arcsec) — the units are part of the credibility.
 
+### Space environment & HUD chrome
+
+The chrome isn't just dark-themed — it should read as being *in* the environment being rendered, not laid over a photo of it. This is what turns "dark UI with a canvas" into "you're floating in space, and here's an instrument panel":
+
+- **Ambient parallax starfield**: 2–3 star layers at different densities, sizes, and drift speeds rendered behind and around the lensed scene, so the negative space (outside the ring/shadow itself) reads as depth rather than a flat fill. A very slow autonomous drift (or subtle pointer-based parallax) keeps the idle/first-load state alive without being distracting or competing with the lensed content.
+- **Nebula-tinted glow washes**: one or two very low-opacity radial gradients (blues/purples, using the accent color sparingly) placed off-axis, breaking up flatness. Restraint matters here — the gravitational lens stays the loudest thing on screen.
+- **Edge vignette**: a subtle darkening toward the viewport edges, pulling the eye back toward the lensed scene at center.
+- **HUD-styled panels**: the scene panel gets a thin glowing top border in the accent color and fine corner-bracket accents on its outer corners — evoking an instrument readout rather than a generic card. A faint scanline/grain texture is optional extra polish, kept subtle enough to never hurt legibility.
+- All of the above is pure atmosphere, not physics: it lives in CSS and a small ambient canvas/DOM layer, entirely separate from the lens shader. It also respects `prefers-reduced-motion` — drift and twinkle animations freeze, static layers remain.
+
 ### Per-object cards
 
 - One card per mass: name/type badge (point mass / Schwarzschild / Kerr), then mass, position, velocity — each as a **slider paired with a direct numeric input**. Sliders for exploration, typed values for precision; never force one or the other.
@@ -116,10 +126,11 @@ The whole pitch is "the LLM is a nicer input layer than sliders," so the UI has 
 2. **Port to a GLSL fragment shader in Three.js** — same math, real-time, full-screen.
 3. **Build the UI shell around `SceneState`** — full-bleed canvas, scene panel with one object card, slider ↔ numeric input wiring, URL-hash serialization. Getting the single-source-of-truth state model right *before* adding more writers (LLM, presets) is much cheaper than retrofitting it.
 4. **Add a real background** — starfield generator, then optional image/SDSS data as a texture.
-5. **Add camera movement and a second mass** — this is where the "orbiting binary" visual payoff shows up. Add the presets strip here; each preset is just a saved `SceneState`.
-6. **Add the language-steering layer** — start with a hardcoded parser (regex/keyword extraction) to validate the JSON schema, the validation/clamping layer, and the slider-animation UX, then swap in the actual LLM call. The command bar's error and loading states are designed here, not bolted on.
-7. **Deploy to GitHub Pages via GitHub Actions.**
-8. **Stretch**: Kerr metric (rotating black holes), gravitational time dilation visualized via a clock/redshift overlay, numerically-integrated "high fidelity" render mode as a toggle against the lookup-table fast mode, drag-to-reposition masses on the canvas.
+5. **Add the ambient space atmosphere and HUD chrome** — parallax starfield layers, nebula glow washes, vignette, and instrument-panel styling on the scene panel from step 3. Pure visual polish, but easiest to get right once there's a real panel and a real starfield to build around.
+6. **Add camera movement and a second mass** — this is where the "orbiting binary" visual payoff shows up. Add the presets strip here; each preset is just a saved `SceneState`.
+7. **Add the language-steering layer** — start with a hardcoded parser (regex/keyword extraction) to validate the JSON schema, the validation/clamping layer, and the slider-animation UX, then swap in the actual LLM call. The command bar's error and loading states are designed here, not bolted on.
+8. **Deploy to GitHub Pages via GitHub Actions.**
+9. **Stretch**: Kerr metric (rotating black holes), gravitational time dilation visualized via a clock/redshift overlay, numerically-integrated "high fidelity" render mode as a toggle against the lookup-table fast mode, drag-to-reposition masses on the canvas.
 
 ## Honest scope note
 

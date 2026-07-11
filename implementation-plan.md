@@ -79,7 +79,20 @@ Each stage entry has: what exists at the end, what NOT to build yet (scope fence
 
 ---
 
-## Stage 5 — Camera controls, second mass, presets
+## Stage 5 — Space environment & UI atmosphere
+
+**End state:** the areas outside the lensed scene read as deep space, not a flat dark fill — a multi-layer parallax starfield, one or two nebula-tinted glow washes, and an edge vignette sit behind everything. The Stage 3 scene panel gets HUD-style chrome (glowing top border, corner brackets) so it reads as an instrument readout instead of a generic card.
+
+**Scope fence:** pure visual/ambient polish — no new physics, no new `SceneState` fields, no new panels or controls beyond what Stage 3 already built, no changes to the lens shader's math. Stay dependency-free: CSS plus a small ambient canvas/DOM layer, nothing more. If you catch yourself reaching for a particle-effects library, stop.
+
+**Prompt:**
+> Referencing the new "Space environment & HUD chrome" section of `gravitational-lensing-simulator-writeup.md`, add an ambient space atmosphere layer and HUD-style chrome polish on top of the existing UI (the Stage 3 scene panel, the Stage 4 starfield background). Specifically: (1) a lightweight multi-layer parallax starfield — 2–3 layers at different densities, sizes, and drift speeds — rendered behind the main lensed scene, drifting slowly and autonomously or reacting subtly to pointer movement, so the space outside the lensed content has visible depth instead of being a flat dark fill; (2) one or two very low-opacity radial nebula-tinted gradient washes (blues/purples, using the existing accent color sparingly) placed off-center; (3) a subtle vignette toward the viewport edges; (4) HUD treatment on the existing scene panel: a thin glowing top border in the accent color and fine corner-bracket accents on its outer corners, readable over the existing backdrop-blur fill. Respect `prefers-reduced-motion` — freeze all drift/twinkle animation, keep the static layers. No new dependencies, no new `SceneState` fields, no changes to the lens shader.
+
+**Verify:** the negative space around the lensed scene visibly shows a layered, parallaxed starfield rather than a flat fill; the scene panel reads as an instrument/HUD element, not a plain card; toggling `prefers-reduced-motion` (OS setting or devtools emulation) freezes the ambient motion with no layout shift; existing slider/panel interactions still work exactly as before; no console errors.
+
+---
+
+## Stage 6 — Camera controls, second mass, presets
 
 **End state:** orbit/zoom camera, a second lensing object with weak-field superposition, and a presets strip of named saved scenes. This is where the "orbiting binary" payoff from the spec shows up.
 
@@ -92,11 +105,11 @@ Each stage entry has: what exists at the end, what NOT to build yet (scope fence
 
 ---
 
-## Stage 6 — Language layer: schema, validation, and mock parser
+## Stage 7 — Language layer: schema, validation, and mock parser
 
 **End state:** the command bar UI, a JSON schema for LLM output, zod validation/clamping, and a hardcoded regex/keyword parser standing in for the real LLM. This validates the entire UX and data path before any model integration risk enters the picture.
 
-**Scope fence:** explicitly no real LLM call yet — that's Stage 7. The parser here can be dumb (keyword/regex matching "two black holes", "3 solar masses", etc.) as long as the schema, validation, and UI states it exercises are the real ones.
+**Scope fence:** explicitly no real LLM call yet — that's Stage 8. The parser here can be dumb (keyword/regex matching "two black holes", "3 solar masses", etc.) as long as the schema, validation, and UI states it exercises are the real ones.
 
 **Prompt:**
 > Referencing the "Language input" and "Scene state & validation" sections of `gravitational-lensing-simulator-writeup.md`, build the natural-language input path end to end, using a hardcoded regex/keyword parser in place of a real LLM for now. Define a zod schema for the structured output (objects with mass/position/velocity, one or more), validate and clamp any parsed values against physically sane ranges before they reach `SceneState`, and surface (rather than silently fix) anything that got clamped or dropped. Build the command-bar UI at bottom-center (command-palette style, single line, rotating placeholder examples) per the spec's visual language. On a successful parse, animate the affected sliders to their new values (~400ms) and show a compact editable summary of the interpretation below the bar with changed values briefly highlighted. On parse failure or an out-of-range result, show an inline message under the bar (never a modal) and leave state untouched. Wire the regex parser to handle a handful of realistic phrasings (mass, count of objects, basic orbit description) — it doesn't need to be smart, it needs to exercise every UI state (success, partial, failure) correctly.
@@ -105,20 +118,20 @@ Each stage entry has: what exists at the end, what NOT to build yet (scope fence
 
 ---
 
-## Stage 7 — Real LLM integration
+## Stage 8 — Real LLM integration
 
-**End state:** the mock parser from Stage 6 is replaced by a real LLM call — WebLLM (in-browser, WebGPU) as the deployed path, with an Ollama-based local dev path documented for demo recording. Same schema, same validation, same UI — only the parser implementation changes.
+**End state:** the mock parser from Stage 7 is replaced by a real LLM call — WebLLM (in-browser, WebGPU) as the deployed path, with an Ollama-based local dev path documented for demo recording. Same schema, same validation, same UI — only the parser implementation changes.
 
-**Scope fence:** don't touch the UI built in Stage 6 beyond swapping the parser implementation behind its existing interface. If you find yourself redesigning the command bar here, stop — that's scope creep from Stage 6.
+**Scope fence:** don't touch the UI built in Stage 7 beyond swapping the parser implementation behind its existing interface. If you find yourself redesigning the command bar here, stop — that's scope creep from Stage 7.
 
 **Prompt:**
-> Replace the hardcoded regex parser from Stage 6 with a real LLM call, behind the same interface (same input string in, same zod-validated structured output out — no changes to the command bar UI or `SceneState` wiring). Implement WebLLM (in-browser via WebGPU) as the primary path: constrained-output prompting so the model only emits the structured JSON object matching the existing schema. Add a loading/progress state on the command bar for the model weight download on first use (size + percentage), and make sure the simulator remains fully usable via sliders and presets during that download — language input is an enhancement, not a blocker. Detect lack of WebGPU support and degrade gracefully to a quiet inline note ("language input unavailable in this browser") with sliders/presets still fully functional. Also document (in the README) how to run the language layer against local Ollama instead, for development and demo recording, per the spec's "local-only mode" option.
+> Replace the hardcoded regex parser from Stage 7 with a real LLM call, behind the same interface (same input string in, same zod-validated structured output out — no changes to the command bar UI or `SceneState` wiring). Implement WebLLM (in-browser via WebGPU) as the primary path: constrained-output prompting so the model only emits the structured JSON object matching the existing schema. Add a loading/progress state on the command bar for the model weight download on first use (size + percentage), and make sure the simulator remains fully usable via sliders and presets during that download — language input is an enhancement, not a blocker. Detect lack of WebGPU support and degrade gracefully to a quiet inline note ("language input unavailable in this browser") with sliders/presets still fully functional. Also document (in the README) how to run the language layer against local Ollama instead, for development and demo recording, per the spec's "local-only mode" option.
 
 **Verify:** a real natural-language prompt produces correct structured output and updates the scene; the app is fully usable via sliders while weights are downloading; a browser without WebGPU shows the graceful-degradation note rather than breaking.
 
 ---
 
-## Stage 8 — Deployment
+## Stage 9 — Deployment
 
 **End state:** live on GitHub Pages, auto-deployed on push to main via the Stage 0 GitHub Actions workflow.
 
@@ -131,7 +144,7 @@ Each stage entry has: what exists at the end, what NOT to build yet (scope fence
 
 ---
 
-## Stage 9 — Stretch goals (pick per session, don't batch)
+## Stage 10 — Stretch goals (pick per session, don't batch)
 
 Each of these is independently sized to be its own prompt — do them in any order, or skip any of them, based on time remaining. Don't combine more than one per session; they touch the shader/physics core in ways that are easier to debug in isolation.
 
