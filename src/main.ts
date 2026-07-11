@@ -1,4 +1,12 @@
 import "./style.css";
+import { checkerboardBackground } from "./physics/backgrounds";
+import { AU, SOLAR_MASS } from "./physics/constants";
+import { einsteinRadius } from "./physics/deflection";
+import {
+  renderLensedImage,
+  type LensCameraConfig,
+  type PointMassLens,
+} from "./physics/renderLensedImage";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#scene");
 if (!canvas) {
@@ -10,34 +18,55 @@ if (!ctx) {
   throw new Error("2D canvas context unavailable");
 }
 
+// Stage 1 demo scene: a single point-mass lens, ray-traced on the CPU to
+// validate the deflection math (see src/physics/) before porting it to a
+// GLSL shader in Stage 2. Not real-time by design.
+const lens: PointMassLens = {
+  massKg: SOLAR_MASS * 1e6,
+  angularPosition: { x: 0, y: 0 },
+};
+const distanceObserverLensM = 1000 * AU;
+const distanceObserverSourceM = 2000 * AU;
+const distanceLensSourceM = distanceObserverSourceM - distanceObserverLensM;
+const thetaE = einsteinRadius(
+  lens.massKg,
+  distanceObserverLensM,
+  distanceObserverSourceM,
+  distanceLensSourceM,
+);
+
+function render(): void {
+  const width = canvas!.width;
+  const height = canvas!.height;
+  if (width === 0 || height === 0) return;
+
+  const camera: LensCameraConfig = {
+    distanceObserverLensM,
+    distanceObserverSourceM,
+    fieldOfViewRad: thetaE * 6, // auto-zoom so the Einstein ring is always framed nicely
+    width,
+    height,
+  };
+
+  const background = checkerboardBackground(camera.fieldOfViewRad / 12);
+  const image = renderLensedImage(lens, camera, background);
+  ctx!.putImageData(new ImageData(image.data, image.width, image.height), 0, 0);
+}
+
+let renderScheduled = false;
+function scheduleRender(): void {
+  if (renderScheduled) return;
+  renderScheduled = true;
+  requestAnimationFrame(() => {
+    renderScheduled = false;
+    render();
+  });
+}
+
 function resize(): void {
   canvas!.width = window.innerWidth;
   canvas!.height = window.innerHeight;
+  scheduleRender();
 }
 window.addEventListener("resize", resize);
 resize();
-
-// Placeholder render loop, proving the build pipeline and animation frame
-// loop work end to end. Replaced by the real WebGL renderer in Stage 2.
-function frame(time: number): void {
-  const t = time * 0.0002;
-  const w = canvas!.width;
-  const h = canvas!.height;
-
-  const gradient = ctx!.createRadialGradient(
-    w / 2 + Math.cos(t) * w * 0.2,
-    h / 2 + Math.sin(t) * h * 0.2,
-    0,
-    w / 2,
-    h / 2,
-    Math.max(w, h) * 0.7,
-  );
-  gradient.addColorStop(0, "#1a1a3a");
-  gradient.addColorStop(1, "#050508");
-
-  ctx!.fillStyle = gradient;
-  ctx!.fillRect(0, 0, w, h);
-
-  requestAnimationFrame(frame);
-}
-requestAnimationFrame(frame);
