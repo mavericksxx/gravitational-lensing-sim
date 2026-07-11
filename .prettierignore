@@ -4,3 +4,4 @@ node_modules
 # Prose docs — hand-formatted, not subject to prettier's markdown wrapping.
 gravitational-lensing-simulator-writeup.md
 implementation-plan.md
+ui-guidelines.md
