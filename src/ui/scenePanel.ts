@@ -2,6 +2,8 @@ import { SDSS_TARGETS } from "../render/backgroundLoader";
 import {
   MASS_LOG_MAX,
   MASS_LOG_MIN,
+  MAX_OBJECTS,
+  MIN_OBJECTS,
   POSITION_RANGE,
   SDSS_TARGET_IDS,
   VELOCITY_RANGE,
@@ -12,6 +14,7 @@ import {
   clampVelocity,
   clampZoom,
   type BackgroundSource,
+  type LensObjectState,
   type SceneState,
   type SdssTargetId,
 } from "../state/sceneState";
@@ -208,6 +211,115 @@ function buildMassParam(
   return { row: group, refresh };
 }
 
+/** One object's mass/position/velocity controls, with an optional remove button. */
+function buildObjectCard(
+  label: string,
+  get: () => LensObjectState,
+  onFieldChange: () => void,
+  onRemove: (() => void) | null,
+): { el: HTMLElement; refresh: () => void } {
+  const card = el("div", "object-card scene-panel__section");
+  const cardHeader = el("div", "object-card__header");
+  const cardName = el("span", "text-label");
+  cardName.textContent = label;
+  const cardBadge = el("span", "text-badge object-card__badge");
+  cardBadge.textContent = "Schwarzschild";
+  cardHeader.append(cardName, cardBadge);
+
+  if (onRemove) {
+    const removeBtn = el("button", "object-card__remove", {
+      type: "button",
+      "aria-label": `Remove ${label}`,
+    });
+    removeBtn.textContent = "×";
+    removeBtn.addEventListener("click", onRemove);
+    cardHeader.append(removeBtn);
+  }
+  card.append(cardHeader);
+
+  const massParam = buildMassParam(
+    () => get().massSolarMasses,
+    (v) => {
+      get().massSolarMasses = v;
+      onFieldChange();
+    },
+  );
+  const posX = buildLinearParam(
+    "Position x",
+    "fov",
+    -POSITION_RANGE,
+    POSITION_RANGE,
+    3,
+    () => get().position.x,
+    (v) => {
+      get().position.x = v;
+      onFieldChange();
+    },
+    clampPosition,
+  );
+  const posY = buildLinearParam(
+    "Position y",
+    "fov",
+    -POSITION_RANGE,
+    POSITION_RANGE,
+    3,
+    () => get().position.y,
+    (v) => {
+      get().position.y = v;
+      onFieldChange();
+    },
+    clampPosition,
+  );
+  const velX = buildLinearParam(
+    "Velocity x",
+    "fov/s",
+    -VELOCITY_RANGE,
+    VELOCITY_RANGE,
+    4,
+    () => get().velocity.x,
+    (v) => {
+      get().velocity.x = v;
+      onFieldChange();
+    },
+    clampVelocity,
+  );
+  const velY = buildLinearParam(
+    "Velocity y",
+    "fov/s",
+    -VELOCITY_RANGE,
+    VELOCITY_RANGE,
+    4,
+    () => get().velocity.y,
+    (v) => {
+      get().velocity.y = v;
+      onFieldChange();
+    },
+    clampVelocity,
+  );
+  card.append(massParam.row, posX.row, posY.row, velX.row, velY.row);
+
+  function refresh(): void {
+    massParam.refresh();
+    posX.refresh();
+    posY.refresh();
+    velX.refresh();
+    velY.refresh();
+  }
+
+  return { el: card, refresh };
+}
+
+function defaultSecondObject(): LensObjectState {
+  // Offset and lighter than a typical first object, so adding one
+  // produces an immediately visible, visually distinct second lens
+  // rather than an identical mass sitting on top of the first.
+  return {
+    massSolarMasses: 3e5,
+    position: { x: 0.25, y: 0 },
+    velocity: { x: 0, y: 0 },
+  };
+}
+
 /** Background source select, plus the upload/SDSS controls it reveals. */
 function buildBackgroundSection(
   get: () => BackgroundSource,
@@ -322,77 +434,47 @@ export function createScenePanel(
   const body = el("div", "scene-panel__body");
   panel.append(body);
 
-  // Object card
-  const card = el("div", "object-card scene-panel__section");
-  const cardHeader = el("div", "object-card__header");
-  const cardName = el("span", "text-label");
-  cardName.textContent = "Object 1";
-  const cardBadge = el("span", "text-badge object-card__badge");
-  cardBadge.textContent = "Schwarzschild";
-  cardHeader.append(cardName, cardBadge);
-  card.append(cardHeader);
+  // Object cards — rebuilt from scratch on add/remove/setState rather than
+  // incrementally patched. Add/remove only happens on explicit button
+  // clicks (not high-frequency), so the simplicity is worth more than the
+  // saved DOM churn.
+  const objectsSection = el("div", "scene-panel__objects scene-panel__section");
+  const addButton = el("button", "object-add-button", { type: "button" });
+  addButton.textContent = "+ Add object";
+  let objectCards: { el: HTMLElement; refresh: () => void }[] = [];
 
-  const massParam = buildMassParam(
-    () => state.object.massSolarMasses,
-    (v) => {
-      state.object.massSolarMasses = v;
-      onChange(structuredClone(state));
-    },
-  );
-  const posX = buildLinearParam(
-    "Position x",
-    "fov",
-    -POSITION_RANGE,
-    POSITION_RANGE,
-    3,
-    () => state.object.position.x,
-    (v) => {
-      state.object.position.x = v;
-      onChange(structuredClone(state));
-    },
-    clampPosition,
-  );
-  const posY = buildLinearParam(
-    "Position y",
-    "fov",
-    -POSITION_RANGE,
-    POSITION_RANGE,
-    3,
-    () => state.object.position.y,
-    (v) => {
-      state.object.position.y = v;
-      onChange(structuredClone(state));
-    },
-    clampPosition,
-  );
-  const velX = buildLinearParam(
-    "Velocity x",
-    "fov/s",
-    -VELOCITY_RANGE,
-    VELOCITY_RANGE,
-    4,
-    () => state.object.velocity.x,
-    (v) => {
-      state.object.velocity.x = v;
-      onChange(structuredClone(state));
-    },
-    clampVelocity,
-  );
-  const velY = buildLinearParam(
-    "Velocity y",
-    "fov/s",
-    -VELOCITY_RANGE,
-    VELOCITY_RANGE,
-    4,
-    () => state.object.velocity.y,
-    (v) => {
-      state.object.velocity.y = v;
-      onChange(structuredClone(state));
-    },
-    clampVelocity,
-  );
-  card.append(massParam.row, posX.row, posY.row, velX.row, velY.row);
-  body.append(card);
+  function rebuildObjectCards(): void {
+    for (const card of objectCards) card.el.remove();
+    addButton.remove();
+
+    objectCards = state.objects.map((_, index) =>
+      buildObjectCard(
+        `Object ${index + 1}`,
+        () => state.objects[index],
+        () => onChange(structuredClone(state)),
+        state.objects.length > MIN_OBJECTS
+          ? () => {
+              state.objects.splice(index, 1);
+              rebuildObjectCards();
+              onChange(structuredClone(state));
+            }
+          : null,
+      ),
+    );
+
+    for (const card of objectCards) objectsSection.append(card.el);
+    addButton.hidden = state.objects.length >= MAX_OBJECTS;
+    objectsSection.append(addButton);
+  }
+
+  addButton.addEventListener("click", () => {
+    state.objects.push(defaultSecondObject());
+    rebuildObjectCards();
+    onChange(structuredClone(state));
+  });
+
+  rebuildObjectCards();
+  body.append(objectsSection);
 
   // Global controls
   const globalSection = el("div", "scene-panel__section");
@@ -434,19 +516,13 @@ export function createScenePanel(
   tab.addEventListener("click", () => setExpanded(true));
   collapseBtn.addEventListener("click", () => setExpanded(false));
 
-  function refreshAll(): void {
-    massParam.refresh();
-    posX.refresh();
-    posY.refresh();
-    velX.refresh();
-    velY.refresh();
-    zoom.refresh();
-    background.refresh();
-  }
-
   function setState(next: SceneState): void {
     Object.assign(state, structuredClone(next));
-    refreshAll();
+    // Object count may have changed (e.g. a preset with two objects
+    // applied while only one was present) — rebuild rather than refresh.
+    rebuildObjectCards();
+    zoom.refresh();
+    background.refresh();
   }
 
   function setBackgroundStatus(status: string | null): void {

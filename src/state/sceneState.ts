@@ -20,8 +20,11 @@ export interface LensObjectState {
    * Screen-relative drift, in field-of-view-fractions per second. This
    * is the *initial condition*: SceneState itself never changes on its
    * own. The render loop derives the instantaneous position from
-   * position + velocity * elapsedTime each frame — the same pattern
-   * multi-body orbits will need later.
+   * position + velocity * elapsedTime each frame. With two objects this
+   * is also how the "orbiting binary" preset works — each object drifts
+   * independently at constant velocity, which is a straight-line
+   * approximation of an orbit (no actual two-body gravity between the
+   * lenses), not real orbital mechanics.
    */
   velocity: Vec2;
 }
@@ -31,6 +34,21 @@ export interface CameraState {
   distanceObserverSourceM: number;
   /** Multiplier on the auto-computed field of view; >1 zooms in. */
   zoom: number;
+  /**
+   * View-center offset, in radians — the "pan" half of camera controls
+   * (drag on the canvas). There's no literal camera-orbit concept here:
+   * the renderer is a 2D angular sky-position ray-tracer, not a movable
+   * 3D viewpoint, so "orbit" is pan + zoom rather than flying around the
+   * lens in 3D.
+   *
+   * Deliberately in absolute radians rather than a field-of-view
+   * fraction (unlike object position/velocity): pan represents where the
+   * camera is physically pointed, so it should hold steady in absolute
+   * terms as zoom changes — zooming in should zoom toward wherever
+   * you've panned to, not re-center back toward the original view as the
+   * field of view shrinks around a fraction-based offset.
+   */
+  pan: Vec2;
 }
 
 /** Known SDSS cutout targets — the RA/Dec each maps to lives in src/render/backgroundLoader.ts. */
@@ -47,7 +65,14 @@ export type BackgroundSource =
   { type: "starfield" } | { type: "upload" } | { type: "sdss"; target: SdssTargetId };
 
 export interface SceneState {
-  object: LensObjectState;
+  /**
+   * 1-2 lensing objects. Beyond a single point mass this stops being
+   * analytically clean — src/render's shader sums each object's
+   * deflection independently (weak-field superposition), which is
+   * astrophysically approximate but visually/pedagogically reasonable,
+   * per the spec's honesty-about-approximation stance.
+   */
+  objects: LensObjectState[];
   camera: CameraState;
   background: BackgroundSource;
   /**
@@ -64,18 +89,30 @@ export const POSITION_RANGE = 0.5;
 export const VELOCITY_RANGE = 0.05;
 export const ZOOM_MIN = 0.3;
 export const ZOOM_MAX = 3;
+// Pan has no slider (drag-only) and its "reasonable" magnitude depends on
+// the current field of view, which varies by orders of magnitude with
+// mass/zoom — so this is a generous safety bound against a corrupted URL
+// producing a non-finite value, not a meaningful UX constraint.
+export const PAN_RANGE_RAD = 1;
+export const MIN_OBJECTS = 1;
+export const MAX_OBJECTS = 2;
+
+export function defaultLensObject(): LensObjectState {
+  return {
+    massSolarMasses: 1e6,
+    position: { x: 0, y: 0 },
+    velocity: { x: 0, y: 0 },
+  };
+}
 
 export function defaultSceneState(): SceneState {
   return {
-    object: {
-      massSolarMasses: 1e6,
-      position: { x: 0, y: 0 },
-      velocity: { x: 0, y: 0 },
-    },
+    objects: [defaultLensObject()],
     camera: {
       distanceObserverLensM: 1000 * AU,
       distanceObserverSourceM: 2000 * AU,
       zoom: 1,
+      pan: { x: 0, y: 0 },
     },
     background: { type: "starfield" },
     quality: "fast",
@@ -101,4 +138,9 @@ export function clampVelocity(value: number): number {
 export function clampZoom(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 1;
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
+}
+
+export function clampPan(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(PAN_RANGE_RAD, Math.max(-PAN_RANGE_RAD, value));
 }
