@@ -1,6 +1,7 @@
 import "./style.css";
 import "./ui/tokens.css";
 import "./ui/panel.css";
+import "./ui/ambient.css";
 import {
   buildSdssCutoutUrl,
   loadFileAsTexture,
@@ -15,6 +16,7 @@ import { SOLAR_MASS } from "./physics/constants";
 import { einsteinRadius } from "./physics/deflection";
 import { defaultSceneState, type BackgroundSource, type SceneState } from "./state/sceneState";
 import { readSceneStateFromUrl, writeSceneStateToUrl } from "./state/urlSync";
+import { mountAmbientLayer } from "./ui/ambient";
 import { createScenePanel } from "./ui/scenePanel";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#scene");
@@ -29,6 +31,8 @@ if (!canvas) {
 let state: SceneState = readSceneStateFromUrl() ?? defaultSceneState();
 
 const scene = createLensScene(canvas);
+
+mountAmbientLayer(document.body);
 
 function computeFieldOfViewRad(s: SceneState): number {
   const massKg = s.object.massSolarMasses * SOLAR_MASS;
