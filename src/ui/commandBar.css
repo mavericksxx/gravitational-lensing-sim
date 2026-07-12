@@ -1,0 +1,120 @@
+.command-bar {
+  position: fixed;
+  bottom: var(--space-5);
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: min(560px, calc(100vw - 2 * var(--space-5)));
+  height: 48px;
+  padding: 0 var(--space-3);
+  background: var(--color-panel);
+  backdrop-filter: var(--blur-panel);
+  -webkit-backdrop-filter: var(--blur-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-3);
+  box-shadow: var(--shadow-panel);
+  transform: translateX(-50%);
+  transition:
+    border-color 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .command-bar {
+    background: var(--color-panel-solid);
+  }
+}
+
+.command-bar:focus-within {
+  border-color: rgba(255, 180, 84, 0.6);
+  box-shadow: var(--glow-hud);
+}
+.command-bar--error {
+  border-color: rgba(255, 122, 107, 0.5);
+}
+.command-bar--success {
+  border-color: var(--color-accent);
+  transition: border-color 600ms var(--ease-out);
+}
+
+.command-bar__prompt {
+  color: rgba(255, 180, 84, 0.7);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+}
+.command-bar:focus-within .command-bar__prompt {
+  color: var(--color-accent);
+}
+
+.command-bar__input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+}
+.command-bar__input::placeholder {
+  color: var(--color-text-dim);
+}
+.command-bar__input:disabled {
+  opacity: 0.6;
+}
+
+.command-bar__spinner {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1.5px solid var(--color-border-strong);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: command-bar-spin 0.9s linear infinite;
+}
+@keyframes command-bar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.command-bar__message {
+  position: fixed;
+  bottom: calc(var(--space-5) + 48px + var(--space-2));
+  left: 50%;
+  z-index: 6;
+  width: min(560px, calc(100vw - 2 * var(--space-5)));
+  min-height: 1em;
+  text-align: center;
+  transform: translateX(-50%);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+.command-bar__message--error {
+  color: var(--color-error);
+}
+.command-bar__message--summary {
+  color: var(--color-text-dim);
+  font-family: var(--font-mono);
+}
+.command-bar__message .changed-value {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.command-bar__warning {
+  margin-top: 2px;
+  color: var(--color-text-faint);
+  font-style: italic;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .command-bar {
+    transition: none;
+  }
+  /* The spinner is status information, not decoration — it keeps
+     animating under reduced motion, per ui-guidelines.md's policy. */
+}
