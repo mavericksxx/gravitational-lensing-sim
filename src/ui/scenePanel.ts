@@ -1,7 +1,9 @@
+import { SDSS_TARGETS } from "../render/backgroundLoader";
 import {
   MASS_LOG_MAX,
   MASS_LOG_MIN,
   POSITION_RANGE,
+  SDSS_TARGET_IDS,
   VELOCITY_RANGE,
   ZOOM_MAX,
   ZOOM_MIN,
@@ -9,12 +11,16 @@ import {
   clampPosition,
   clampVelocity,
   clampZoom,
+  type BackgroundSource,
   type SceneState,
+  type SdssTargetId,
 } from "../state/sceneState";
 
 export interface ScenePanel {
   /** Syncs the UI to an externally-provided state without firing onChange (e.g. loading from the URL). */
   setState(state: SceneState): void;
+  /** Shows a status line under the background controls (loading/error text), or clears it when null. */
+  setBackgroundStatus(status: string | null): void;
 }
 
 const SUPERSCRIPT_DIGITS: Record<string, string> = {
@@ -202,10 +208,90 @@ function buildMassParam(
   return { row: group, refresh };
 }
 
+/** Background source select, plus the upload/SDSS controls it reveals. */
+function buildBackgroundSection(
+  get: () => BackgroundSource,
+  set: (value: BackgroundSource) => void,
+  onFileSelected: (file: File) => void,
+): { section: HTMLElement; refresh: () => void; status: HTMLElement } {
+  const section = el("div", "scene-panel__section");
+  const row = el("div", "param-group__row");
+  const labelEl = el("label", "text-label");
+  labelEl.textContent = "Background";
+  row.append(labelEl);
+
+  const sourceSelect = el("select", "text-value bg-select", { "aria-label": "Background source" });
+  for (const [value, label] of [
+    ["starfield", "Starfield"],
+    ["upload", "Upload image"],
+    ["sdss", "SDSS cutout"],
+  ] as const) {
+    const option = el("option");
+    option.value = value;
+    option.textContent = label;
+    sourceSelect.append(option);
+  }
+
+  const fileInput = el("input", "bg-file-input", {
+    type: "file",
+    accept: "image/*",
+    "aria-label": "Upload background image",
+  });
+  const fileRow = el("div", "bg-sub-row");
+  fileRow.append(fileInput);
+
+  const targetSelect = el("select", "text-value bg-select", { "aria-label": "SDSS target" });
+  for (const id of SDSS_TARGET_IDS) {
+    const option = el("option");
+    option.value = id;
+    option.textContent = SDSS_TARGETS[id].label;
+    targetSelect.append(option);
+  }
+  const targetRow = el("div", "bg-sub-row");
+  targetRow.append(targetSelect);
+
+  const status = el("span", "text-caption bg-status", { "aria-live": "polite" });
+
+  section.append(row, sourceSelect, fileRow, targetRow, status);
+
+  function refresh(): void {
+    const bg = get();
+    sourceSelect.value = bg.type;
+    fileRow.hidden = bg.type !== "upload";
+    targetRow.hidden = bg.type !== "sdss";
+    if (bg.type === "sdss") targetSelect.value = bg.target;
+  }
+
+  sourceSelect.addEventListener("change", () => {
+    const type = sourceSelect.value as BackgroundSource["type"];
+    if (type === "sdss") {
+      set({ type: "sdss", target: targetSelect.value as SdssTargetId });
+    } else if (type === "upload") {
+      set({ type: "upload" });
+    } else {
+      set({ type: "starfield" });
+    }
+    refresh();
+  });
+
+  targetSelect.addEventListener("change", () => {
+    set({ type: "sdss", target: targetSelect.value as SdssTargetId });
+  });
+
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files?.[0];
+    if (file) onFileSelected(file);
+  });
+
+  refresh();
+  return { section, refresh, status };
+}
+
 export function createScenePanel(
   container: HTMLElement,
   initialState: SceneState,
   onChange: (state: SceneState) => void,
+  onBackgroundFileSelected: (file: File) => void,
 ): ScenePanel {
   const state: SceneState = structuredClone(initialState);
 
@@ -326,6 +412,16 @@ export function createScenePanel(
   globalSection.append(zoom.row);
   body.append(globalSection);
 
+  const background = buildBackgroundSection(
+    () => state.background,
+    (v) => {
+      state.background = v;
+      onChange(structuredClone(state));
+    },
+    onBackgroundFileSelected,
+  );
+  body.append(background.section);
+
   container.append(tab, panel);
 
   function setExpanded(expanded: boolean): void {
@@ -345,6 +441,7 @@ export function createScenePanel(
     velX.refresh();
     velY.refresh();
     zoom.refresh();
+    background.refresh();
   }
 
   function setState(next: SceneState): void {
@@ -352,5 +449,9 @@ export function createScenePanel(
     refreshAll();
   }
 
-  return { setState };
+  function setBackgroundStatus(status: string | null): void {
+    background.status.textContent = status ?? "";
+  }
+
+  return { setState, setBackgroundStatus };
 }

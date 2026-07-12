@@ -10,7 +10,6 @@ uniform float uDistanceObserverLensM;
 // reduced deflection angle used by the lens equation.
 uniform float uLensSourceDistanceRatio;
 uniform float uShadowRadiusRad;
-uniform float uCheckerPeriodRad;
 
 // Deflection-angle lookup table: alpha(b) precomputed on the CPU (see
 // src/render/deflectionTable.ts, reusing the same deflectionAngle()
@@ -20,13 +19,52 @@ uniform sampler2D uDeflectionTable;
 uniform float uTableLogBMin;
 uniform float uTableLogBMax;
 
-// Same tiling as src/physics/backgrounds.ts: nearest-integer tile
-// indexing centers a tile on the optical axis, so the checkerboard is
-// exactly mirror-symmetric there. floor(x + 0.5) matches JS Math.round.
-vec3 checkerboard(vec2 theta) {
-  vec2 tile = floor(theta / uCheckerPeriodRad + 0.5);
-  float parity = mod(tile.x + tile.y, 2.0);
-  return parity < 1.0 ? vec3(235.0, 235.0, 245.0) / 255.0 : vec3(20.0, 20.0, 35.0) / 255.0;
+// Background source. 0 = procedural starfield, 1 = a real texture
+// (uploaded image or an SDSS cutout) sampled over uBackgroundScaleRad.
+uniform int uBackgroundMode;
+uniform float uStarfieldCellRad;
+uniform sampler2D uBackgroundTexture;
+uniform float uBackgroundScaleRad;
+
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+// Cell-based procedural starfield: each cell either has no star or one
+// star at a pseudo-random position/size/brightness, all derived from a
+// hash of the cell coordinate so it's fully deterministic (same view
+// always shows the same sky, which matters for reproducible screenshots
+// and shareable URLs).
+vec3 starfield(vec2 theta) {
+  vec2 cell = floor(theta / uStarfieldCellRad);
+  vec2 cellUv = fract(theta / uStarfieldCellRad);
+
+  vec3 color = vec3(0.02, 0.02, 0.035);
+
+  float presence = hash21(cell);
+  if (presence > 0.86) {
+    vec2 starPos = vec2(hash21(cell + 17.1), hash21(cell + 31.7));
+    float brightness = hash21(cell + 53.9);
+    float size = mix(0.06, 0.18, brightness);
+    float dist = length(cellUv - starPos);
+    float star = smoothstep(size, 0.0, dist) * brightness;
+
+    float warmth = hash21(cell + 71.3);
+    vec3 tint = mix(vec3(0.79, 0.83, 1.0), vec3(1.0, 0.87, 0.68), step(0.8, warmth));
+    color += tint * star;
+  }
+
+  return color;
+}
+
+vec3 backgroundTexture(vec2 beta) {
+  vec2 uv = beta / uBackgroundScaleRad + 0.5;
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+    return vec3(0.02, 0.02, 0.035);
+  }
+  return texture2D(uBackgroundTexture, uv).rgb;
 }
 
 float lookupDeflection(float bMeters) {
@@ -58,5 +96,6 @@ void main() {
   vec2 sourceRel = rel * (1.0 - alphaHat / r);
   vec2 beta = uLensAngularPosition + sourceRel;
 
-  gl_FragColor = vec4(checkerboard(beta), 1.0);
+  vec3 color = uBackgroundMode == 1 ? backgroundTexture(beta) : starfield(beta);
+  gl_FragColor = vec4(color, 1.0);
 }

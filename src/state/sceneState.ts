@@ -33,9 +33,23 @@ export interface CameraState {
   zoom: number;
 }
 
+/** Known SDSS cutout targets — the RA/Dec each maps to lives in src/render/backgroundLoader.ts. */
+export type SdssTargetId = "whirlpool" | "andromeda" | "sombrero";
+export const SDSS_TARGET_IDS: readonly SdssTargetId[] = ["whirlpool", "andromeda", "sombrero"];
+
+/**
+ * An uploaded image's actual bytes never live in SceneState — they can't
+ * be serialized into a URL. The "upload" tag just records the *intent*;
+ * urlSync coerces it back to starfield on decode, since there's no file
+ * to restore, per the spec's "handle that gracefully" instruction.
+ */
+export type BackgroundSource =
+  { type: "starfield" } | { type: "upload" } | { type: "sdss"; target: SdssTargetId };
+
 export interface SceneState {
   object: LensObjectState;
   camera: CameraState;
+  background: BackgroundSource;
   /**
    * "high-fidelity" (numerically-integrated geodesics) is a Stage 10
    * stretch goal and has no renderer yet — this field exists so the URL
@@ -63,6 +77,7 @@ export function defaultSceneState(): SceneState {
       distanceObserverSourceM: 2000 * AU,
       zoom: 1,
     },
+    background: { type: "starfield" },
     quality: "fast",
   };
 }
