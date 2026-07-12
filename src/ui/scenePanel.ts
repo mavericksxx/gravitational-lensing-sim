@@ -47,7 +47,7 @@ function toSuperscript(n: number): string {
     .join("");
 }
 
-function formatMass(massSolarMasses: number): string {
+export function formatMass(massSolarMasses: number): string {
   if (massSolarMasses >= 1e4) {
     const exponent = Math.floor(Math.log10(massSolarMasses));
     const mantissa = massSolarMasses / 10 ** exponent;

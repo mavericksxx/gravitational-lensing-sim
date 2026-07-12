@@ -1,6 +1,7 @@
 .presets-strip {
   position: fixed;
-  bottom: var(--space-5);
+  /* Sits above the 48px command bar plus its own gap, per ui-guidelines.md. */
+  bottom: calc(var(--space-5) + 48px + var(--space-6));
   left: 50%;
   z-index: 5;
   display: flex;
@@ -43,7 +44,8 @@
 
 .presets-tab {
   position: fixed;
-  bottom: var(--space-5);
+  /* Sits above the 48px command bar plus its own gap, per ui-guidelines.md. */
+  bottom: calc(var(--space-5) + 48px + var(--space-6));
   left: 50%;
   z-index: 5;
   transform: translateX(-50%);
