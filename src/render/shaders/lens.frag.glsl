@@ -47,34 +47,115 @@ uniform float uStarfieldCellRad;
 uniform sampler2D uBackgroundTexture;
 uniform float uBackgroundScaleRad;
 
+const vec3 SPACE_COLOR = vec3(0.02, 0.02, 0.035);
+
 float hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
   p += dot(p, p + 45.32);
   return fract(p.x * p.y);
 }
 
-// Cell-based procedural starfield: each cell either has no star or one
-// star at a pseudo-random position/size/brightness, all derived from a
-// hash of the cell coordinate so it's fully deterministic (same view
-// always shows the same sky, which matters for reproducible screenshots
-// and shareable URLs).
+// Lattice-hash value noise with Hermite (smoothstep) interpolation between
+// the four surrounding corners — the standard cheap building block for
+// fractal Brownian motion, entirely hand-rolled since GLSL ES 1.00 has no
+// built-in noise.
+float valueNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  float a = hash21(i);
+  float b = hash21(i + vec2(1.0, 0.0));
+  float c = hash21(i + vec2(0.0, 1.0));
+  float d = hash21(i + vec2(1.0, 1.0));
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// 4 octaves: enough cloud-like detail at multiple scales to read as gas
+// structure rather than a single smooth blob, still cheap (a handful of
+// hash evaluations per octave, no texture sampling).
+float fbm(vec2 p) {
+  float value = 0.0;
+  float amplitude = 0.5;
+  for (int i = 0; i < 4; i++) {
+    value += amplitude * valueNoise(p);
+    p *= 2.0;
+    amplitude *= 0.5;
+  }
+  return value;
+}
+
+// Colored nebula-like cloud structure behind the stars — a direct
+// response to the background being too sparse for the lensing distortion
+// to read clearly against it. Two independent FBM layers: one for cloud
+// density/color, one (differently offset, so it doesn't just echo the
+// first) for dust-lane occlusion that darkens patches of the cloud, the
+// way real emission nebulae show dark dust structure cutting through the
+// glow. A coarse third hash picks between an emission (pink/magenta) and
+// reflection (blue/teal) palette per sky region, so the field doesn't
+// read as one uniform tint everywhere.
+vec3 nebula(vec2 theta) {
+  float scale = uStarfieldCellRad * 12.0;
+  vec2 p = theta / scale;
+
+  float cloud = fbm(p);
+  cloud = smoothstep(0.35, 0.78, cloud); // most of the sky stays near-empty
+
+  float dust = fbm(p * 1.8 + 91.7);
+  dust = smoothstep(0.25, 0.65, dust);
+
+  vec2 region = floor(theta / (scale * 4.0));
+  float theme = hash21(region + 500.0);
+  vec3 emission = vec3(0.62, 0.16, 0.34);
+  vec3 reflection = vec3(0.12, 0.24, 0.52);
+  vec3 tint = mix(reflection, emission, step(0.5, theme));
+
+  return tint * cloud * dust * 0.32;
+}
+
+// Thin plus-shaped flare through a star's center, falling off with
+// distance along each axis — the diffraction-spike look bright stars get
+// in real astrophotography, reserved for a small fraction of stars so it
+// reads as a highlight rather than a repeating pattern.
+float diffractionSpike(vec2 offsetFromCenter) {
+  float armLength = 0.42;
+  float thickness = 0.012;
+  float horizontal =
+    smoothstep(thickness, 0.0, abs(offsetFromCenter.y)) *
+    smoothstep(armLength, 0.0, abs(offsetFromCenter.x));
+  float vertical =
+    smoothstep(thickness, 0.0, abs(offsetFromCenter.x)) *
+    smoothstep(armLength, 0.0, abs(offsetFromCenter.y));
+  return max(horizontal, vertical);
+}
+
+// Cell-based procedural starfield layered over the nebula: each cell
+// either has no star or one star at a pseudo-random position/size/
+// brightness, all derived from a hash of the cell coordinate so it's
+// fully deterministic (same view always shows the same sky, which
+// matters for reproducible screenshots and shareable URLs). A small
+// fraction of stars are brighter "hero" stars with a diffraction spike.
 vec3 starfield(vec2 theta) {
+  vec3 color = SPACE_COLOR + nebula(theta);
+
   vec2 cell = floor(theta / uStarfieldCellRad);
   vec2 cellUv = fract(theta / uStarfieldCellRad);
 
-  vec3 color = vec3(0.02, 0.02, 0.035);
-
   float presence = hash21(cell);
-  if (presence > 0.86) {
+  if (presence > 0.76) {
     vec2 starPos = vec2(hash21(cell + 17.1), hash21(cell + 31.7));
     float brightness = hash21(cell + 53.9);
-    float size = mix(0.06, 0.18, brightness);
-    float dist = length(cellUv - starPos);
-    float star = smoothstep(size, 0.0, dist) * brightness;
+    float size = mix(0.05, 0.16, brightness);
+    vec2 offset = cellUv - starPos;
+    float dist = length(offset);
+    float core = smoothstep(size, 0.0, dist) * brightness;
 
     float warmth = hash21(cell + 71.3);
     vec3 tint = mix(vec3(0.79, 0.83, 1.0), vec3(1.0, 0.87, 0.68), step(0.8, warmth));
-    color += tint * star;
+
+    float isHero = step(0.93, hash21(cell + 113.7));
+    float spike = diffractionSpike(offset) * isHero * brightness;
+
+    color += tint * (core + spike);
   }
 
   return color;
@@ -83,7 +164,7 @@ vec3 starfield(vec2 theta) {
 vec3 backgroundTexture(vec2 beta) {
   vec2 uv = beta / uBackgroundScaleRad + 0.5;
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-    return vec3(0.02, 0.02, 0.035);
+    return SPACE_COLOR;
   }
   return texture2D(uBackgroundTexture, uv).rgb;
 }
