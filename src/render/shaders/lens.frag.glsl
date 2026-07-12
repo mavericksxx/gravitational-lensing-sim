@@ -4,20 +4,41 @@ varying vec2 vUv;
 
 uniform vec2 uResolution;
 uniform float uFieldOfViewRad;
-uniform vec2 uLensAngularPosition;
+// Pan offset (radians) — where the view is centered, independent of any
+// lens's own position. This is "camera pan," the drag half of the
+// pan/zoom camera controls (there's no 3D orbit here: the renderer is a
+// 2D angular sky-position ray-tracer, not a movable 3D viewpoint).
+uniform vec2 uPanRad;
+
 uniform float uDistanceObserverLensM;
 // D_LS / D_S, i.e. the ratio that turns a raw deflection angle into the
 // reduced deflection angle used by the lens equation.
 uniform float uLensSourceDistanceRatio;
-uniform float uShadowRadiusRad;
 
-// Deflection-angle lookup table: alpha(b) precomputed on the CPU (see
-// src/render/deflectionTable.ts, reusing the same deflectionAngle()
-// formula validated by Stage 1's unit tests) and sampled here instead of
-// recomputing 4GM/(c^2 b) per fragment.
-uniform sampler2D uDeflectionTable;
-uniform float uTableLogBMin;
-uniform float uTableLogBMax;
+// Up to two lensing objects, on a shared lens plane (same
+// uDistanceObserverLensM for both — a simplifying assumption, since nothing
+// in the UI models them at different distances from the observer).
+// uLensCount is 1 or 2; the second lens's uniforms are simply unused when
+// uLensCount is 1. Deflections are summed (weak-field superposition) —
+// astrophysically approximate for a real two-body system, but the
+// standard simplification for this kind of visualization.
+uniform int uLensCount;
+uniform vec2 uLensPosition0;
+uniform float uShadowRadiusRad0;
+uniform vec2 uLensPosition1;
+uniform float uShadowRadiusRad1;
+
+// Deflection-angle lookup tables: alpha(b) precomputed per lens on the
+// CPU (see src/render/deflectionTable.ts, reusing the same
+// deflectionAngle() formula validated by Stage 1's unit tests) and
+// sampled here instead of recomputing 4GM/(c^2 b) per fragment. Each
+// lens gets its own table since they can have very different masses.
+uniform sampler2D uDeflectionTable0;
+uniform float uTableLogBMin0;
+uniform float uTableLogBMax0;
+uniform sampler2D uDeflectionTable1;
+uniform float uTableLogBMin1;
+uniform float uTableLogBMax1;
 
 // Background source. 0 = procedural starfield, 1 = a real texture
 // (uploaded image or an SDSS cutout) sampled over uBackgroundScaleRad.
@@ -67,11 +88,11 @@ vec3 backgroundTexture(vec2 beta) {
   return texture2D(uBackgroundTexture, uv).rgb;
 }
 
-float lookupDeflection(float bMeters) {
+float lookupDeflection(sampler2D table, float logBMin, float logBMax, float bMeters) {
   float logB = log(max(bMeters, 1.0));
-  float u = (logB - uTableLogBMin) / (uTableLogBMax - uTableLogBMin);
+  float u = (logB - logBMin) / (logBMax - logBMin);
   u = clamp(u, 0.0, 1.0);
-  return texture2D(uDeflectionTable, vec2(u, 0.5)).r;
+  return texture2D(table, vec2(u, 0.5)).r;
 }
 
 void main() {
@@ -79,22 +100,31 @@ void main() {
   // renderer's (pixel + 0.5) convention.
   vec2 pixel = vUv * uResolution;
   float radPerPixel = uFieldOfViewRad / uResolution.x;
-  vec2 theta = (pixel - uResolution * 0.5) * radPerPixel;
+  vec2 theta = (pixel - uResolution * 0.5) * radPerPixel + uPanRad;
 
-  vec2 rel = theta - uLensAngularPosition;
-  float r = length(rel);
-
-  if (r < uShadowRadiusRad) {
+  vec2 rel0 = theta - uLensPosition0;
+  float r0 = length(rel0);
+  if (r0 < uShadowRadiusRad0) {
     gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     return;
   }
 
-  float bMeters = r * uDistanceObserverLensM;
-  float alpha = lookupDeflection(bMeters);
-  float alphaHat = alpha * uLensSourceDistanceRatio;
+  vec2 rel1 = theta - uLensPosition1;
+  float r1 = length(rel1);
+  if (uLensCount >= 2 && r1 < uShadowRadiusRad1) {
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
 
-  vec2 sourceRel = rel * (1.0 - alphaHat / r);
-  vec2 beta = uLensAngularPosition + sourceRel;
+  float alphaHat0 = lookupDeflection(uDeflectionTable0, uTableLogBMin0, uTableLogBMax0, r0 * uDistanceObserverLensM) * uLensSourceDistanceRatio;
+  vec2 deflection = (rel0 / r0) * alphaHat0;
+
+  if (uLensCount >= 2) {
+    float alphaHat1 = lookupDeflection(uDeflectionTable1, uTableLogBMin1, uTableLogBMax1, r1 * uDistanceObserverLensM) * uLensSourceDistanceRatio;
+    deflection += (rel1 / r1) * alphaHat1;
+  }
+
+  vec2 beta = theta - deflection;
 
   vec3 color = uBackgroundMode == 1 ? backgroundTexture(beta) : starfield(beta);
   gl_FragColor = vec4(color, 1.0);

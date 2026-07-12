@@ -136,6 +136,47 @@
   color: var(--color-text);
 }
 
+.object-card__remove {
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  border-radius: var(--radius-1);
+  transition: color 120ms var(--ease-out);
+}
+.object-card__remove:hover {
+  color: var(--color-error);
+}
+
+.object-add-button {
+  width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-2);
+  background: transparent;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-2);
+  color: var(--color-text-dim);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  transition:
+    color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out);
+}
+.object-add-button:hover {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
+.object-add-button[hidden] {
+  display: none;
+}
+
 .object-card__badge {
   background: rgba(255, 255, 255, 0.06);
   color: var(--color-text-dim);
