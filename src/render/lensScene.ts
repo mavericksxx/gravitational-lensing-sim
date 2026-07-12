@@ -16,12 +16,27 @@ export interface LensSceneCameraConfig {
   fieldOfViewRad: number;
 }
 
+export type BackgroundConfig =
+  { mode: "starfield" } | { mode: "texture"; texture: THREE.Texture; scaleRad: number };
+
 export interface LensScene {
   setSize(width: number, height: number): void;
   /** Pushes a new lens/camera configuration to the shader's uniforms. */
   update(lens: PointMassLensConfig, camera: LensSceneCameraConfig): void;
+  /** Switches the background source the shader samples for unlensed sky. */
+  setBackground(background: BackgroundConfig): void;
   render(): void;
   dispose(): void;
+}
+
+// A 1x1 dark fallback texture bound to the sampler at all times, so the
+// uniform is never null — starfield mode never actually samples it, but
+// leaving a sampler unbound is asking for driver-specific warnings.
+function createFallbackTexture(): THREE.DataTexture {
+  const data = new Uint8Array([5, 5, 9, 255]);
+  const texture = new THREE.DataTexture(data, 1, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+  texture.needsUpdate = true;
+  return texture;
 }
 
 /**
@@ -45,6 +60,8 @@ export function createLensScene(canvas: HTMLCanvasElement): LensScene {
   const scene = new THREE.Scene();
   const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
+  const fallbackTexture = createFallbackTexture();
+
   const material = new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader,
@@ -55,10 +72,13 @@ export function createLensScene(canvas: HTMLCanvasElement): LensScene {
       uDistanceObserverLensM: { value: 1 },
       uLensSourceDistanceRatio: { value: 0.5 },
       uShadowRadiusRad: { value: 0 },
-      uCheckerPeriodRad: { value: 1 },
+      uStarfieldCellRad: { value: 1 },
       uDeflectionTable: { value: null as THREE.DataTexture | null },
       uTableLogBMin: { value: 0 },
       uTableLogBMax: { value: 1 },
+      uBackgroundMode: { value: 0 },
+      uBackgroundTexture: { value: fallbackTexture as THREE.Texture },
+      uBackgroundScaleRad: { value: 1 },
     },
   });
 
@@ -66,6 +86,7 @@ export function createLensScene(canvas: HTMLCanvasElement): LensScene {
   scene.add(quad);
 
   let currentTable: DeflectionTable | null = null;
+  let lastFieldOfViewRad = 1;
 
   function setSize(width: number, height: number): void {
     renderer.setSize(width, height, false);
@@ -85,6 +106,7 @@ export function createLensScene(canvas: HTMLCanvasElement): LensScene {
 
     currentTable?.texture.dispose();
     currentTable = buildDeflectionTable(lens.massKg, bMin, bMax);
+    lastFieldOfViewRad = camera.fieldOfViewRad;
 
     material.uniforms.uFieldOfViewRad.value = camera.fieldOfViewRad;
     (material.uniforms.uLensAngularPosition.value as THREE.Vector2).set(
@@ -95,10 +117,20 @@ export function createLensScene(canvas: HTMLCanvasElement): LensScene {
     material.uniforms.uLensSourceDistanceRatio.value =
       distanceLensSourceM / camera.distanceObserverSourceM;
     material.uniforms.uShadowRadiusRad.value = shadowRadius;
-    material.uniforms.uCheckerPeriodRad.value = camera.fieldOfViewRad / 12;
+    material.uniforms.uStarfieldCellRad.value = camera.fieldOfViewRad / 12;
     material.uniforms.uDeflectionTable.value = currentTable.texture;
     material.uniforms.uTableLogBMin.value = currentTable.logBMin;
     material.uniforms.uTableLogBMax.value = currentTable.logBMax;
+  }
+
+  function setBackground(background: BackgroundConfig): void {
+    if (background.mode === "starfield") {
+      material.uniforms.uBackgroundMode.value = 0;
+      return;
+    }
+    material.uniforms.uBackgroundMode.value = 1;
+    material.uniforms.uBackgroundTexture.value = background.texture;
+    material.uniforms.uBackgroundScaleRad.value = background.scaleRad || lastFieldOfViewRad;
   }
 
   function render(): void {
@@ -109,8 +141,9 @@ export function createLensScene(canvas: HTMLCanvasElement): LensScene {
     material.dispose();
     quad.geometry.dispose();
     currentTable?.texture.dispose();
+    fallbackTexture.dispose();
     renderer.dispose();
   }
 
-  return { setSize, update, render, dispose };
+  return { setSize, update, setBackground, render, dispose };
 }

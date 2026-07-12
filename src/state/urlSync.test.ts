@@ -48,4 +48,29 @@ describe("sanitizeSceneState", () => {
     state.quality = "nonsense";
     expect(sanitizeSceneState(state)!.quality).toBe("fast");
   });
+
+  it("preserves a valid sdss background target", () => {
+    const state = defaultSceneState();
+    state.background = { type: "sdss", target: "andromeda" };
+    const result = sanitizeSceneState(JSON.parse(JSON.stringify(state)))!;
+    expect(result.background).toEqual({ type: "sdss", target: "andromeda" });
+  });
+
+  it("rejects an unknown sdss target and falls back to starfield", () => {
+    const state = defaultSceneState() as unknown as Record<string, unknown>;
+    state.background = { type: "sdss", target: "not-a-real-target" };
+    expect(sanitizeSceneState(state)!.background).toEqual({ type: "starfield" });
+  });
+
+  it("coerces an upload background to starfield, since the file can't be restored from a URL", () => {
+    const state = defaultSceneState() as unknown as Record<string, unknown>;
+    state.background = { type: "upload" };
+    expect(sanitizeSceneState(state)!.background).toEqual({ type: "starfield" });
+  });
+
+  it("defaults a missing background to starfield", () => {
+    const state = defaultSceneState() as unknown as Record<string, unknown>;
+    delete state.background;
+    expect(sanitizeSceneState(state)!.background).toEqual({ type: "starfield" });
+  });
 });

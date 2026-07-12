@@ -1,13 +1,29 @@
 import {
+  SDSS_TARGET_IDS,
   clampMassSolarMasses,
   clampPosition,
   clampVelocity,
   clampZoom,
   defaultSceneState,
+  type BackgroundSource,
   type SceneState,
 } from "./sceneState";
 
 const HASH_KEY = "state";
+
+/**
+ * "upload" coerces to "starfield" here — an uploaded image's bytes never
+ * make it into the URL, so restoring "upload" from a link would leave the
+ * renderer with a background type and no actual image to show.
+ */
+function sanitizeBackground(value: unknown): BackgroundSource {
+  if (typeof value !== "object" || value === null) return { type: "starfield" };
+  const v = value as Record<string, unknown>;
+  if (v.type === "sdss" && SDSS_TARGET_IDS.includes(v.target as (typeof SDSS_TARGET_IDS)[number])) {
+    return { type: "sdss", target: v.target as (typeof SDSS_TARGET_IDS)[number] };
+  }
+  return { type: "starfield" };
+}
 
 /**
  * Validates and clamps an arbitrary decoded value into a SceneState,
@@ -53,6 +69,7 @@ export function sanitizeSceneState(value: unknown): SceneState | null {
           : defaults.camera.distanceObserverSourceM,
       zoom: clampZoom(Number(camera.zoom)),
     },
+    background: sanitizeBackground(v.background),
     quality: v.quality === "high-fidelity" ? "high-fidelity" : "fast",
   };
 }

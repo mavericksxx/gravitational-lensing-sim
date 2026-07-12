@@ -1,14 +1,19 @@
 import "./style.css";
 import "./ui/tokens.css";
 import "./ui/panel.css";
-import { SOLAR_MASS } from "./physics/constants";
-import { einsteinRadius } from "./physics/deflection";
+import {
+  buildSdssCutoutUrl,
+  loadFileAsTexture,
+  loadImageAsTexture,
+} from "./render/backgroundLoader";
 import {
   createLensScene,
   type LensSceneCameraConfig,
   type PointMassLensConfig,
 } from "./render/lensScene";
-import { defaultSceneState, type SceneState } from "./state/sceneState";
+import { SOLAR_MASS } from "./physics/constants";
+import { einsteinRadius } from "./physics/deflection";
+import { defaultSceneState, type BackgroundSource, type SceneState } from "./state/sceneState";
 import { readSceneStateFromUrl, writeSceneStateToUrl } from "./state/urlSync";
 import { createScenePanel } from "./ui/scenePanel";
 
@@ -25,10 +30,79 @@ let state: SceneState = readSceneStateFromUrl() ?? defaultSceneState();
 
 const scene = createLensScene(canvas);
 
-createScenePanel(document.body, state, (next) => {
-  state = next;
-  writeSceneStateToUrl(state);
-});
+function computeFieldOfViewRad(s: SceneState): number {
+  const massKg = s.object.massSolarMasses * SOLAR_MASS;
+  const { distanceObserverLensM, distanceObserverSourceM } = s.camera;
+  const thetaE = einsteinRadius(
+    massKg,
+    distanceObserverLensM,
+    distanceObserverSourceM,
+    distanceObserverSourceM - distanceObserverLensM,
+  );
+  return (thetaE * 6) / s.camera.zoom;
+}
+
+// Background loading is async (file read / network fetch) and reacts to
+// state.background changes rather than running every frame. "upload" is
+// the odd one out: its actual bytes never live in SceneState (see
+// sceneState.ts), so it's driven by a separate file-selected callback
+// instead of this key comparison.
+let lastBackgroundKey = "";
+
+function backgroundKey(bg: BackgroundSource): string {
+  return JSON.stringify(bg);
+}
+
+async function syncBackground(bg: BackgroundSource): Promise<void> {
+  const key = backgroundKey(bg);
+  if (key === lastBackgroundKey) return;
+  lastBackgroundKey = key;
+
+  if (bg.type === "starfield") {
+    panel.setBackgroundStatus(null);
+    scene.setBackground({ mode: "starfield" });
+    return;
+  }
+
+  if (bg.type === "upload") {
+    panel.setBackgroundStatus("Choose an image file to upload.");
+    return; // the actual texture load happens in onBackgroundFileSelected
+  }
+
+  panel.setBackgroundStatus(`Loading ${bg.target} cutout from SDSS…`);
+  try {
+    const texture = await loadImageAsTexture(buildSdssCutoutUrl(bg.target));
+    scene.setBackground({ mode: "texture", texture, scaleRad: computeFieldOfViewRad(state) });
+    panel.setBackgroundStatus(null);
+  } catch {
+    scene.setBackground({ mode: "starfield" });
+    panel.setBackgroundStatus("Couldn't reach SDSS — showing starfield instead.");
+  }
+}
+
+const panel = createScenePanel(
+  document.body,
+  state,
+  (next) => {
+    state = next;
+    writeSceneStateToUrl(state);
+    void syncBackground(state.background);
+  },
+  (file) => {
+    panel.setBackgroundStatus(`Loading ${file.name}…`);
+    loadFileAsTexture(file)
+      .then((texture) => {
+        scene.setBackground({ mode: "texture", texture, scaleRad: computeFieldOfViewRad(state) });
+        panel.setBackgroundStatus(null);
+      })
+      .catch(() => {
+        panel.setBackgroundStatus(`Couldn't load ${file.name} — showing starfield instead.`);
+        scene.setBackground({ mode: "starfield" });
+      });
+  },
+);
+
+void syncBackground(state.background); // also picks up a shared SDSS link on first load
 
 function resize(): void {
   const width = window.innerWidth;
@@ -54,14 +128,7 @@ function deriveLensAndCamera(
 ): { lens: PointMassLensConfig; camera: LensSceneCameraConfig } {
   const massKg = s.object.massSolarMasses * SOLAR_MASS;
   const { distanceObserverLensM, distanceObserverSourceM } = s.camera;
-  const distanceLensSourceM = distanceObserverSourceM - distanceObserverLensM;
-  const thetaE = einsteinRadius(
-    massKg,
-    distanceObserverLensM,
-    distanceObserverSourceM,
-    distanceLensSourceM,
-  );
-  const fieldOfViewRad = (thetaE * 6) / s.camera.zoom; // auto-zoom, scaled by the user's zoom control
+  const fieldOfViewRad = computeFieldOfViewRad(s); // auto-zoom, scaled by the user's zoom control
 
   const positionFovX = s.object.position.x + s.object.velocity.x * elapsedSeconds;
   const positionFovY = s.object.position.y + s.object.velocity.y * elapsedSeconds;
