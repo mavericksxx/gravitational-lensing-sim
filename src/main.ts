@@ -14,7 +14,10 @@ import {
   type LensSceneCameraConfig,
   type PointMassLensConfig,
 } from "./render/lensScene";
-import { parseSceneDescription } from "./language/mockParser";
+import { createOllamaClient } from "./language/ollamaClient";
+import { createWebLlmClient } from "./language/webllmClient";
+import { isWebGPUSupported } from "./language/webgpu";
+import { parseSceneDescriptionWithLLM } from "./language/llmParser";
 import { SOLAR_MASS } from "./physics/constants";
 import { einsteinRadius } from "./physics/deflection";
 import { PRESETS } from "./state/presets";
@@ -235,20 +238,40 @@ attachCameraControls(canvas, {
   onInteraction: () => presetsStrip.notifyInteraction(),
 });
 
+// Real LLM backend selection: WebLLM (in-browser, WebGPU) is the
+// deployed default; set VITE_LLM_BACKEND=ollama for local dev/demo
+// recording against a local Ollama server instead (see README). Either
+// way, main.ts only ever talks to the LlmClient interface — the mock
+// parser from Stage 7 is no longer wired in, but stays in the codebase
+// (and its tests) as a fast, deterministic reference for the schema/
+// validation pipeline.
+const llmBackend = import.meta.env.VITE_LLM_BACKEND === "ollama" ? "ollama" : "webllm";
+const webGpuSupported = isWebGPUSupported();
+const languageUnavailable = llmBackend === "webllm" && !webGpuSupported;
+const llmClient = languageUnavailable
+  ? null
+  : llmBackend === "ollama"
+    ? createOllamaClient()
+    : createWebLlmClient();
+
 mountCommandBar(document.body, {
-  onSubmit: async (text) => {
-    // Artificial delay standing in for real network/inference latency —
-    // Stage 8 replaces this whole callback with an actual async LLM
-    // call, at which point the delay is real instead of simulated, and
-    // the command bar's loading state (already built and tested here)
-    // needs no changes at all.
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    return parseSceneDescription(text, state.objects);
+  onSubmit: (text) => {
+    if (!llmClient) {
+      return Promise.resolve({
+        success: false,
+        error: "Language input unavailable in this browser.",
+      });
+    }
+    return parseSceneDescriptionWithLLM(text, state.objects, llmClient);
   },
   onSuccess: (result) => {
     applyParsedObjects(result.objects);
     presetsStrip.notifyInteraction();
   },
+  ensureReady: llmClient ? (onProgress) => llmClient.ensureReady(onProgress) : undefined,
+  unavailableReason: languageUnavailable
+    ? "Language input unavailable in this browser — no WebGPU. Sliders and presets still work."
+    : undefined,
 });
 
 function resize(): void {

@@ -1,14 +1,11 @@
 import type { LensObjectState } from "../state/sceneState";
-import { formatMass } from "../ui/scenePanel";
+import { buildSummary } from "./summary";
 import { ParsedSceneSchema, type ParsedObject, type ParsedScene } from "./schema";
 import { validateAndClamp } from "./validate";
+import type { ParseOutcome } from "./parseOutcome";
 
-export type ParseOutcome =
-  | { success: true; objects: LensObjectState[]; warnings: string[]; summary: SummaryPart[] }
-  | { success: false; error: string };
-
-/** A summary is a sequence of plain text and highlighted (changed) value spans. */
-export type SummaryPart = { text: string; changed: boolean };
+export type { ParseOutcome } from "./parseOutcome";
+export type { SummaryPart } from "./summary";
 
 const MASS_KEYWORDS: Record<string, number> = {
   supermassive: 1e8,
@@ -84,30 +81,6 @@ function extractCandidateScene(text: string): ParsedScene | null {
   }
 
   return { objects };
-}
-
-function buildSummary(objects: LensObjectState[], previous: LensObjectState[]): SummaryPart[] {
-  const parts: SummaryPart[] = [];
-  const countChanged = objects.length !== previous.length;
-
-  parts.push({
-    text: objects.length === 1 ? "1 object" : `${objects.length} objects`,
-    changed: countChanged,
-  });
-
-  const masses = objects.map((o) => formatMass(o.massSolarMasses));
-  const allSameMass = new Set(masses).size === 1;
-  const massChanged =
-    countChanged || objects.some((o, i) => o.massSolarMasses !== previous[i]?.massSolarMasses);
-
-  parts.push({ text: " · ", changed: false });
-  if (allSameMass) {
-    parts.push({ text: `${masses[0]} M☉ each`, changed: massChanged });
-  } else {
-    parts.push({ text: `${masses.join(", ")} M☉`, changed: massChanged });
-  }
-
-  return parts;
 }
 
 export function parseSceneDescription(
