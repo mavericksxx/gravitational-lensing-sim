@@ -161,12 +161,29 @@ vec3 starfield(vec2 theta) {
   return color;
 }
 
+// A real image (upload/SDSS) only covers a finite patch of sky, unlike
+// the procedural starfield which fills the frame at any zoom. Zooming
+// out past the image's extent used to hard-cut to flat space color right
+// at the UV boundary — a visible rectangle, like the photo was pasted on
+// top rather than being part of the same sky. Feathering the last ~6% of
+// the image into the *same* procedural starfield/nebula used elsewhere
+// removes that seam: the real image reads as a denser patch within the
+// same continuous sky instead of a bordered inset.
 vec3 backgroundTexture(vec2 beta) {
   vec2 uv = beta / uBackgroundScaleRad + 0.5;
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-    return SPACE_COLOR;
+  vec3 fallback = starfield(beta);
+
+  float featherWidth = 0.06;
+  vec2 edgeDistance = min(uv, 1.0 - uv);
+  float insideAmount = min(edgeDistance.x, edgeDistance.y);
+  float textureWeight = smoothstep(0.0, featherWidth, insideAmount);
+
+  if (textureWeight <= 0.0) {
+    return fallback;
   }
-  return texture2D(uBackgroundTexture, uv).rgb;
+
+  vec3 texColor = texture2D(uBackgroundTexture, clamp(uv, 0.0, 1.0)).rgb;
+  return mix(fallback, texColor, textureWeight);
 }
 
 float lookupDeflection(sampler2D table, float logBMin, float logBMax, float bMeters) {
