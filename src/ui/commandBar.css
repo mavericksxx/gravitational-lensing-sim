@@ -37,6 +37,9 @@
   border-color: var(--color-accent);
   transition: border-color 600ms var(--ease-out);
 }
+.command-bar--unavailable {
+  opacity: 0.6;
+}
 
 .command-bar__prompt {
   color: rgba(255, 180, 84, 0.7);
@@ -79,6 +82,25 @@
   }
 }
 
+.command-bar__progress {
+  position: fixed;
+  bottom: calc(var(--space-5) - 3px);
+  left: 50%;
+  z-index: 6;
+  width: min(560px, calc(100vw - 2 * var(--space-5)));
+  height: 2px;
+  background: var(--color-border);
+  border-radius: 1px;
+  overflow: hidden;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.command-bar__progress-fill {
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 200ms var(--ease-out);
+}
+
 .command-bar__message {
   position: fixed;
   bottom: calc(var(--space-5) + 48px + var(--space-2));
@@ -98,6 +120,14 @@
 .command-bar__message--summary {
   color: var(--color-text-dim);
   font-family: var(--font-mono);
+}
+.command-bar__message--progress {
+  color: var(--color-text-dim);
+  font-family: var(--font-mono);
+}
+.command-bar__message--note {
+  color: var(--color-text-faint);
+  font-style: italic;
 }
 .command-bar__message .changed-value {
   color: var(--color-accent);
