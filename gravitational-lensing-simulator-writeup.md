@@ -31,6 +31,7 @@ It also sits at a nice intersection: systems/rendering work (shaders, real-time 
 
 - **Three.js** scene with a **custom GLSL fragment shader** performing the per-pixel ray-tracing/deflection lookup. This is what makes it real-time in a browser rather than a multi-second Python render.
 - Background source options: procedural starfield (default, zero dependencies), a user-uploaded image, or real astronomical imagery pulled from free public archives (SDSS, ESO) for a scene that's literally warping a real patch of sky.
+- The procedural default isn't just point stars: it layers in nebula-like colored gas-cloud structure (fractal noise, no texture assets) and denser, more varied stars. A sparse dot-field makes the lensing distortion hard to *see* — there's not enough structure in the background for the eye to register that it's being bent. A field with real density and color gradients (closer to how astrophotography actually looks — think the Orion Nebula, not a clip-art starfield) gives the deflection something visually substantial to warp, which is the whole point of the renderer.
 - Camera controls (orbit/zoom) via Three.js `OrbitControls` equivalent for WebGL 2 (note: `THREE.OrbitControls` isn't available in some sandboxed environments — plan for a manual orbit-camera implementation if needed).
 
 ### 3. Language-steering layer
@@ -129,8 +130,9 @@ The whole pitch is "the LLM is a nicer input layer than sliders," so the UI has 
 5. **Add the ambient space atmosphere and HUD chrome** — parallax starfield layers, nebula glow washes, vignette, and instrument-panel styling on the scene panel from step 3. Pure visual polish, but easiest to get right once there's a real panel and a real starfield to build around.
 6. **Add camera movement and a second mass** — this is where the "orbiting binary" visual payoff shows up. Add the presets strip here; each preset is just a saved `SceneState`.
 7. **Add the language-steering layer** — start with a hardcoded parser (regex/keyword extraction) to validate the JSON schema, the validation/clamping layer, and the slider-animation UX, then swap in the actual LLM call. The command bar's error and loading states are designed here, not bolted on.
-8. **Deploy to GitHub Pages via GitHub Actions.**
-9. **Stretch**: Kerr metric (rotating black holes), gravitational time dilation visualized via a clock/redshift overlay, numerically-integrated "high fidelity" render mode as a toggle against the lookup-table fast mode, drag-to-reposition masses on the canvas.
+8. **Enrich the default procedural background** — layer nebula-like colored cloud structure and denser stars into the starfield shader from step 4, so the lensing distortion is clearly visible against real visual structure instead of a sparse dot-field.
+9. **Deploy to GitHub Pages via GitHub Actions.**
+10. **Stretch**: Kerr metric (rotating black holes), gravitational time dilation visualized via a clock/redshift overlay, numerically-integrated "high fidelity" render mode as a toggle against the lookup-table fast mode, drag-to-reposition masses on the canvas.
 
 ## Honest scope note
 

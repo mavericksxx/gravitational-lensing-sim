@@ -118,7 +118,20 @@ Each stage entry has: what exists at the end, what NOT to build yet (scope fence
 
 ---
 
-## Stage 8 — Real LLM integration
+## Stage 8 — Procedural nebula & richer starfield
+
+**End state:** the default procedural background (the one actually being gravitationally lensed — not the Stage 5 ambient chrome layer, which is decorative and untouched by this stage) gains layered, colored nebula-like cloud structure and denser, more varied stars, closer to real astrophotography (think the Orion Nebula: dense colorful gas clouds, dark dust lanes, bright stars, some with diffraction spikes) than a sparse dot-field. This is a direct response to real feedback: with too few stars, there isn't enough visual structure for the eye to register that the background is being bent, which undercuts the entire point of the renderer.
+
+**Scope fence:** shader/background-generation changes only. No new `SceneState` fields (the `background` union stays `starfield | upload | sdss`), no changes to the lens deflection math, no changes to camera/panel/presets/language layers. Stay dependency-free — hand-rolled noise directly in GLSL, no new texture assets or npm packages for the default path. If you're reaching for an external image/texture to fake the nebula look, stop; the point is a procedural generator, matching the existing starfield's zero-dependency, fully-deterministic design (same view always shows the same sky).
+
+**Prompt:**
+> The current procedural starfield (`starfield()` in `lens.frag.glsl`, from Stage 4) is too sparse — there isn't enough background structure for the lensing distortion to read clearly, especially away from the Einstein ring itself. Enrich it with two additions, layered so stars stay on top of nebula: (1) colored nebula-like cloud structure using a hand-rolled 2D value-noise function (lattice-hash + smooth interpolation) composited through 2-4 octaves of fractal Brownian motion for cloud-like density, mapped through a small palette of nebula colors (magenta/pink emission, blue/teal reflection) blended with darker dust-lane occlusion from a second independent noise layer, all at low-to-moderate opacity so it reads as atmospheric depth without hurting contrast against the UI panels or overpowering the lensing distortion itself; (2) denser point stars with more size/brightness variety than currently, plus an occasional brighter "hero" star rendered with a simple 4-point diffraction-spike cross, similar to bright stars in real astrophotography. Keep everything fully deterministic (hash-based on angular position, same convention as the existing star placement) so screenshots and shared URLs stay reproducible. Don't touch the upload or SDSS background paths, the lens equation, or anything outside `src/render/`.
+
+**Verify:** the default starfield background visibly shows colored nebula structure and a denser star field; lensing distortion (ring, arcs, shadow) is clearly visible against the richer background at the default zoom and at least one zoomed-in preset; still renders as a single fragment-shader pass at interactive framerates (no new textures, no extra draw calls); all existing presets, the upload/SDSS background modes, and the full test suite still pass unchanged; no console errors.
+
+---
+
+## Stage 9 — Real LLM integration
 
 **End state:** the mock parser from Stage 7 is replaced by a real LLM call — WebLLM (in-browser, WebGPU) as the deployed path, with an Ollama-based local dev path documented for demo recording. Same schema, same validation, same UI — only the parser implementation changes.
 
@@ -131,7 +144,7 @@ Each stage entry has: what exists at the end, what NOT to build yet (scope fence
 
 ---
 
-## Stage 9 — Deployment
+## Stage 10 — Deployment
 
 **End state:** live on GitHub Pages, auto-deployed on push to main via the Stage 0 GitHub Actions workflow.
 
@@ -144,7 +157,7 @@ Each stage entry has: what exists at the end, what NOT to build yet (scope fence
 
 ---
 
-## Stage 10 — Stretch goals (pick per session, don't batch)
+## Stage 11 — Stretch goals (pick per session, don't batch)
 
 Each of these is independently sized to be its own prompt — do them in any order, or skip any of them, based on time remaining. Don't combine more than one per session; they touch the shader/physics core in ways that are easier to debug in isolation.
 
